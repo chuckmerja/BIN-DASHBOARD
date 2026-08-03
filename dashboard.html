@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sun River Site - Grain Bin Dashboard</title>
+  
+  <!-- Chart.js CDN for Cable Temp & CO2 History Graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* ==========================================================================
+       1. COLOR SCHEME & GLOBAL STYLES
+       ========================================================================== */
+    :root {
+      --bg-color: #0f172a;       /* Dark slate background */
+      --card-bg: #1e293b;       /* Panel card background */
+      --accent: #38bdf8;        /* Sky blue for bin highlights */
+      --accent-hover: #f59e0b;  /* Amber for hovered bins */
+      --text-main: #f8fafc;     /* Bright text */
+      --text-muted: #94a3b8;    /* Subdued labels */
+      --border-color: #334155;  /* Subtle divider lines */
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top Navigation Header */
+    header {
+      padding: 1rem 1.5rem;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 600; color: var(--text-main); }
+    header p { font-size: 0.875rem; color: var(--text-muted); }
+
+    /* Main Container Viewport */
+    .viewport {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      padding: 1rem;
+    }
+
+    /* ==========================================================================
+       2. MAP CONTAINER & SVG SCALING FIXES
+       ========================================================================== */
+    .map-wrapper {
+      position: relative;
+      display: inline-block;
+      width: 100%;
+      max-width: 1755px;
+      line-height: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border-color);
+    }
+
+    .map-wrapper img {
+      display: block;
+      width: 100%;
+      height: auto;
+      pointer-events: none;
+    }
+
+    /* SVG Overlay locked 1:1 over image container */
+    .map-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    /* Interactive Circle & Rectangle Styles */
+    .bin-node {
+      fill: rgba(56, 189, 248, 0.25);
+      stroke: #38bdf8;
+      stroke-width: 2.5;
+      cursor: pointer;
+      pointer-events: all;
+      transition: all 0.2s ease-in-out;
+    }
+
+    /* Hover effect over bins */
+    .bin-node:hover {
+      fill: rgba(245, 158, 11, 0.45);
+      stroke: #f59e0b;
+      stroke-width: 3.5;
+      filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
+    }
+
+    /* Active selected bin style */
+    .bin-node.active {
+      fill: rgba(34, 197, 94, 0.5);
+      stroke: #22c55e;
+      stroke-width: 4;
+    }
+
+    /* Text Labels on Map Markers */
+    .bin-label {
+      fill: #ffffff;
+      font-size: 13px;
+      font-weight: 700;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+    }
+
+    .bin-label-sm {
+      font-size: 10px;
+    }
+
+    /* ==========================================================================
+       3. SLIDING DETAIL DRAWER STYLES
+       ========================================================================== */
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: -440px;
+      width: 420px;
+      height: 100vh;
+      background: var(--card-bg);
+      border-left: 1px solid var(--border-color);
+      box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    .drawer.open { right: 0; }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+    .close-btn:hover { color: var(--text-main); }
+
+    /* Quick Info Metric Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.65rem;
+      margin-bottom: 1rem;
+    }
+
+    .metric-card {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 0.6rem 0.8rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .metric-card .label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-card .value { font-size: 0.95rem; font-weight: 700; margin-top: 0.2rem; color: var(--text-main); }
+
+    .chart-container {
+      margin-top: 0.75rem;
+      background: rgba(15, 23, 42, 0.4);
+      padding: 0.85rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .chart-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <h1>Sun River Grain Storage Site</h1>
+      <p>Click any bin to load real-time status & sensor history</p>
+    </div>
+  </header>
+
+  <div class="viewport">
+    <div class="map-wrapper">
+      
+      <!-- Background site diagram image -->
+      <img src="MFI_SR_BINSITE_ANNOTED.png" alt="Sun River Bin Map" id="site-map">
+
+      <!-- SVG OVERLAY -->
+      <svg class="map-overlay" viewBox="0 0 1755 1131" preserveAspectRatio="xMidYMid meet">
+
+        <!-- LEFT COLUMN -->
+        <g onclick="selectBin('SR4')">
+          <circle cx="179" cy="231" r="45" class="bin-node" id="node-SR4" />
+          <text x="179" y="231" class="bin-label">SR4</text>
+        </g>
+
+        <g onclick="selectBin('SR3')">
+          <circle cx="183" cy="377" r="45" class="bin-node" id="node-SR3" />
+          <text x="183" y="377" class="bin-label">SR3</text>
+        </g>
+
+        <g onclick="selectBin('SR2')">
+          <circle cx="256" cy="712" r="45" class="bin-node" id="node-SR2" />
+          <text x="256" y="712" class="bin-label">SR2</text>
+        </g>
+
+        <g onclick="selectBin('SR7')">
+          <circle cx="127" cy="803" r="45" class="bin-node" id="node-SR7" />
+          <text x="127" y="803" class="bin-label">SR7</text>
+        </g>
+
+        <!-- CENTER BINS & CLUSTER -->
+        <g onclick="selectBin('SR13')">
+          <circle cx="381" cy="627" r="42" class="bin-node" id="node-SR13" />
+          <text x="381" y="627" class="bin-label">SR13</text>
+        </g>
+
+        <g onclick="selectBin('SR9')">
+          <circle cx="378" cy="782" r="42" class="bin-node" id="node-SR9" />
+          <text x="378" y="782" class="bin-label">SR9</text>
+        </g>
+
+        <g onclick="selectBin('SR8')">
+          <circle cx="373" cy="1073" r="45" class="bin-node" id="node-SR8" />
+          <text x="373" y="1073" class="bin-label">SR8</text>
+        </g>
+
+        <g onclick="selectBin('SR5')">
+          <circle cx="533" cy="663" r="55" class="bin-node" id="node-SR5" />
+          <text x="533" y="663" class="bin-label">SR5</text>
+        </g>
+
+        <g onclick="selectBin('SR6')">
+          <circle cx="678" cy="849" r="65" class="bin-node" id="node-SR6" />
+          <text x="678" y="849" class="bin-label">SR6</text>
+        </g>
+
+        <!-- LARGE CENTER BINS -->
+        <g onclick="selectBin('SR18')">
+          <circle cx="678" cy="286" r="60" class="bin-node" id="node-SR18" />
+          <text x="678" y="286" class="bin-label">SR18</text>
+        </g>
+
+        <g onclick="selectBin('SR17')">
+          <circle cx="1054" cy="218" r="65" class="bin-node" id="node-SR17" />
+          <text x="1054" y="218" class="bin-label">SR17</text>
+        </g>
+
+        <g onclick="selectBin('SR16')">
+          <circle cx="886" cy="352" r="65" class="bin-node" id="node-SR16" />
+          <text x="886" y="352" class="bin-label">SR16</text>
+        </g>
+
+        <g onclick="selectBin('SR15')">
+          <circle cx="715" cy="494" r="65" class="bin-node" id="node-SR15" />
+          <text x="715" y="494" class="bin-label">SR15</text>
+        </g>
+
+        <!-- QUONSET BINS -->
+        <g onclick="selectBin('703')">
+          <circle cx="903" cy="875" r="60" class="bin-node" id="node-703" />
+          <text x="903" y="875" class="bin-label">703</text>
+        </g>
+
+        <g onclick="selectBin('704')">
+          <circle cx="1036" cy="726" r="60" class="bin-node" id="node-704" />
+          <text x="1036" y="726" class="bin-label">704</text>
+        </g>
+
+        <!-- RIGHT DIAGONAL ELEVATOR ARRAY -->
+        <g onclick="selectBin('701')">
+          <circle cx="1631" cy="217" r="55" class="bin-node" id="node-701" />
+          <text x="1631" y="217" class="bin-label">701</text>
+        </g>
+
+        <g onclick="selectBin('702')">
+          <circle cx="1472" cy="334" r="55" class="bin-node" id="node-702" />
+          <text x="1572" y="334" class="bin-label">702</text>
+        </g>
+
+        <g onclick="selectBin('706')">
+          <circle cx="1328" cy="463" r="55" class="bin-node" id="node-706" />
+          <text x="1328" y="463" class="bin-label">706</text>
+        </g>
+
+        <g onclick="selectBin('705')">
+          <circle cx="1197" cy="584" r="55" class="bin-node" id="node-705" />
+          <text x="1197" y="584" class="bin-label">705</text>
+        </g>
+
+        <!-- PARKER SMALL RECTANGLES -->
+        <g onclick="selectBin('PKRW')">
+          <rect x="116" y="896" width="40" height="50" rx="3" class="bin-node" id="node-PKRW" />
+          <text x="136" y="921" class="bin-label bin-label-sm">PKRW</text>
+        </g>
+
+        <g onclick="selectBin('PKRM')">
+          <rect x="163" y="896" width="40" height="50" rx="3" class="bin-node" id="node-PKRM" />
+          <text x="183" y="921" class="bin-label bin-label-sm">PKRM</text>
+        </g>
+
+        <g onclick="selectBin('PKRE')">
+          <rect x="209" y="896" width="40" height="50" rx="3" class="bin-node" id="node-PKRE" />
+          <text x="229" y="921" class="bin-label bin-label-sm">PKRE</text>
+        </g>
+
+      </svg>
+    </div>
+  </div>
+
+  <!-- SLIDING DETAIL DRAWER -->
+  <div class="drawer" id="bin-drawer">
+    <div class="drawer-header">
+      <h2 id="drawer-title">Bin Details</h2>
+      <button class="close-btn" onclick="closeDrawer()">&times;</button>
+    </div>
+
+    <!-- Metric Section: Operations & Crop Data -->
+    <div class="metrics-grid">
+      <div class="metric-card" style="grid-column: span 2; border-left: 4px solid var(--accent);">
+        <div class="label">Crop / Year</div>
+        <div class="value" id="val-crop">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Farm Unit</div>
+        <div class="value" id="val-unit">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Practice</div>
+        <div class="value" id="val-prac">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Protein / Quality</div>
+        <div class="value" id="val-protein">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Current Volume</div>
+        <div class="value" id="val-bushels">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">CO₂ Level</div>
+        <div class="value" id="val-co2">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Last Reading</div>
+        <div class="value" id="val-updated" style="color: var(--accent);">--</div>
+      </div>
+
+      <!-- Metric Section: Hardware & Structure Specifications -->
+      <div class="metric-card" style="grid-column: span 2; margin-top: 0.5rem; background: rgba(30, 41, 59, 0.9); border-bottom: 2px solid var(--border-color);">
+        <div class="label" style="color: var(--accent); font-weight: 700;">BIN HARDWARE SPECS</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Brand / Model</div>
+        <div class="value" id="val-brand">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Diameter / Circ.</div>
+        <div class="value" id="val-dim">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Bu / Foot</div>
+        <div class="value" id="val-buft">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Eave Ht / Rings</div>
+        <div class="value" id="val-eave">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Cone Vol (Bu)</div>
+        <div class="value" id="val-conebu">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Bot Cone Corrugations</div>
+        <div class="value" id="val-corrugation">--</div>
+      </div>
+    </div>
+
+    <!-- Chart.js Canvas Elements -->
+    <div class="chart-container">
+      <div class="chart-title">Cable Temp History (°F)</div>
+      <canvas id="tempChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-title">CO₂ Trend (PPM)</div>
+      <canvas id="co2Chart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // Database Object with Separated Hardware and Operational Data
+    const binDatabase = {
+      // LEFT COLUMN BINS
+      "SR4": {
+        brand: "Coop", diameter: "14.5'", circumference: "45.5'", buPerFt: "133 bu/ft", eveHeight: "7.6'", rings: "3 Rings", coneBu: "300 bu", botConeCorrugations: "2.66\"",
+        crop: "Hard Red Winter", year: 2025, unit: "Teichert S20", prac: "Irrigated", bushels: "6,800 / 7,173 bu (95%)", protein: "13.5%", co2: "850 ppm", lastUpdated: "2026-07-26 09:30 AM",
+        temps: [60, 63, 67, 72, 78, 83, 89], co2_history: [500, 550, 620, 710, 780, 810, 850]
+      },
+      "SR3": {
+        brand: "Coop", diameter: "14.7'", circumference: "46.2'", buPerFt: "137 bu/ft", eveHeight: "8.1'", rings: "3 Rings", coneBu: "320 bu", botConeCorrugations: "2.66\"",
+        crop: "Barley (Malting)", year: 2026, unit: "Coop 1276", prac: "Dryland", bushels: "1,100 / 1,276 bu (86%)", protein: "12.0%", co2: "440 ppm", lastUpdated: "2026-07-26 10:15 AM",
+        temps: [49, 50, 50, 51, 51, 52, 52], co2_history: [410, 420, 425, 430, 435, 440, 440]
+      },
+      "SR2": {
+        brand: "Stormor + Cone", diameter: "17.9'", circumference: "56.2'", buPerFt: "203 bu/ft", eveHeight: "10.8'", rings: "4 Rings", coneBu: "400 bu", botConeCorrugations: "2.66\"",
+        crop: "Barley (Malting)", year: 2026, unit: "Fairhaven 17", prac: "Dryland", bushels: "2,150 / 2,492 bu (86%)", protein: "12.4%", co2: "480 ppm", lastUpdated: "2026-07-26 08:45 AM",
+        temps: [48, 49, 50, 50, 51, 52, 52], co2_history: [420, 430, 440, 450, 460, 470, 480]
+      },
+      "SR7": {
+        brand: "Parker", diameter: "17.9'", circumference: "56.2'", buPerFt: "203 bu/ft", eveHeight: "16.0'", rings: "6 Rings", coneBu: "400 bu", botConeCorrugations: "2.66\"",
+        crop: "Feed Barley", year: 2025, unit: "Parker 3950", prac: "Dryland", bushels: "3,400 / 3,950 bu (86%)", protein: "11.2%", co2: "410 ppm", lastUpdated: "2026-07-25 04:20 PM",
+        temps: [46, 46, 47, 47, 48, 48, 48], co2_history: [400, 400, 405, 405, 410, 410, 410]
+      },
+
+      // CENTER CLUSTER BINS
+      "SR13": {
+        brand: "Wheatland", diameter: "12.0'", circumference: "37.7'", buPerFt: "91 bu/ft", eveHeight: "14.0'", rings: "5 Rings", coneBu: "250 bu", botConeCorrugations: "2.66\"",
+        crop: "Dark Northern Spring", year: 2026, unit: "Sun River N/2521", prac: "Irrigated", bushels: "3,200 / 3,950 bu (81%)", protein: "14.2%", co2: "490 ppm", lastUpdated: "2026-07-26 10:00 AM",
+        temps: [50, 50, 51, 51, 52, 52, 53], co2_history: [430, 440, 450, 465, 475, 485, 490]
+      },
+      "SR9": {
+        brand: "Coop", diameter: "17.8'", circumference: "55.9'", buPerFt: "201 bu/ft", eveHeight: "15.2'", rings: "6 Rings", coneBu: "390 bu", botConeCorrugations: "2.66\"",
+        crop: "Dark Northern Spring", year: 2026, unit: "SR N/2521", prac: "Irrigated", bushels: "2,900 / 3,338 bu (87%)", protein: "14.6%", co2: "505 ppm", lastUpdated: "2026-07-26 11:10 AM",
+        temps: [51, 52, 52, 53, 53, 54, 54], co2_history: [440, 450, 460, 480, 490, 500, 505]
+      },
+      "SR8": {
+        brand: "Coop", diameter: "17.9'", circumference: "56.2'", buPerFt: "203 bu/ft", eveHeight: "16.0'", rings: "6 Rings", coneBu: "400 bu", botConeCorrugations: "2.66\"",
+        crop: "Dark Northern Spring", year: 2026, unit: "SR N/2521", prac: "Irrigated", bushels: "3,500 / 3,950 bu (88%)", protein: "14.9%", co2: "515 ppm", lastUpdated: "2026-07-26 11:15 AM",
+        temps: [52, 52, 53, 53, 54, 55, 55], co2_history: [450, 460, 475, 490, 500, 510, 515]
+      },
+      "SR5": {
+        brand: "American", diameter: "24.0'", circumference: "75.4'", buPerFt: "362 bu/ft", eveHeight: "23.9'", rings: "9 Rings", coneBu: "900 bu", botConeCorrugations: "2.66\"",
+        crop: "Hard Red Winter", year: 2026, unit: "Teichert S20", prac: "Irrigated", bushels: "7,800 / 9,227 bu (84%)", protein: "13.8%", co2: "530 ppm", lastUpdated: "2026-07-26 09:15 AM",
+        temps: [53, 54, 55, 55, 56, 56, 57], co2_history: [460, 475, 490, 505, 515, 525, 530]
+      },
+      "SR6": {
+        brand: "Scafco", diameter: "23.9'", circumference: "75.1'", buPerFt: "359 bu/ft", eveHeight: "23.6'", rings: "9 Rings", coneBu: "1,100 bu", botConeCorrugations: "2.66\"",
+        crop: "Dark Northern Spring", year: 2026, unit: "American 15K", prac: "Irrigated", bushels: "12,400 / 15,000 bu (82%)", protein: "14.4%", co2: "540 ppm", lastUpdated: "2026-07-26 08:30 AM",
+        temps: [54, 54, 55, 56, 56, 57, 58], co2_history: [470, 485, 500, 515, 525, 535, 540]
+      },
+
+      // LARGE CENTER MFS BINS
+      "SR18": {
+        brand: "MFS", diameter: "30.0'", circumference: "94.2'", buPerFt: "565 bu/ft", eveHeight: "18.0'", rings: "6 Rings", coneBu: "1,200 bu", botConeCorrugations: "4.0\"",
+        crop: "Dark Northern Spring", year: 2026, unit: "Sun River N/2521", prac: "Irrigated", bushels: "6,900 / 7,500 bu (92%)", protein: "15.0%", co2: "460 ppm", lastUpdated: "2026-07-26 10:45 AM",
+        temps: [47, 47, 48, 48, 49, 49, 50], co2_history: [420, 430, 435, 445, 450, 455, 460]
+      },
+      "SR17": {
+        brand: "MFS", diameter: "30.0'", circumference: "94.2'", buPerFt: "565 bu/ft", eveHeight: "18.0'", rings: "6 Rings", coneBu: "1,200 bu", botConeCorrugations: "4.0\"",
+        crop: "Dark Northern Spring", year: 2026, unit: "Sun River N/2521", prac: "Irrigated", bushels: "7,100 / 7,500 bu (94%)", protein: "14.7%", co2: "475 ppm", lastUpdated: "2026-07-26 10:50 AM",
+        temps: [48, 48, 49, 49, 50, 50, 51], co2_history: [430, 440, 450, 460, 465, 470, 475]
+      },
+      "SR16": {
+        brand: "MFS", diameter: "30.0'", circumference: "94.2'", buPerFt: "565 bu/ft", eveHeight: "18.0'", rings: "6 Rings", coneBu: "1,200 bu", botConeCorrugations: "4.0\"",
+        crop: "Dark Northern Spring", year: 2026, unit: "Sun River N/2521", prac: "Irrigated", bushels: "7,250 / 7,500 bu (96%)", protein: "14.8%", co2: "485 ppm", lastUpdated: "2026-07-26 10:55 AM",
+        temps: [48, 49, 49, 50, 51, 51, 52], co2_history: [435, 445, 455, 465, 475, 480, 485]
+      },
+      "SR15": {
+        brand: "MFS", diameter: "30.0'", circumference: "94.2'", buPerFt: "565 bu/ft", eveHeight: "18.0'", rings: "6 Rings", coneBu: "1,200 bu", botConeCorrugations: "4.0\"",
+        crop: "Dark Northern Spring", year: 2026, unit: "Sun River N/2521", prac: "Irrigated", bushels: "7,400 / 7,500 bu (98%)", protein: "15.2%", co2: "495 ppm", lastUpdated: "2026-07-26 11:00 AM",
+        temps: [49, 50, 50, 51, 51, 52, 53], co2_history: [440, 450, 460, 470, 480, 490, 495]
+      },
+
+      // QUONSET BINS
+      "703": {
+        brand: "Quonset", diameter: "28.0'", circumference: "88.0'", buPerFt: "492 bu/ft", eveHeight: "14.0'", rings: "Flat Storage", coneBu: "0 bu", botConeCorrugations: "N/A",
+        crop: "Hard Red Winter", year: 2025, unit: "S14 T21N R1W", prac: "Dryland", bushels: "6,800 / 7,300 bu (93%)", protein: "13.1%", co2: "430 ppm", lastUpdated: "2026-07-25 02:15 PM",
+        temps: [45, 46, 46, 47, 47, 48, 48], co2_history: [400, 405, 410, 415, 420, 425, 430]
+      },
+      "704": {
+        brand: "Quonset", diameter: "28.0'", circumference: "88.0'", buPerFt: "492 bu/ft", eveHeight: "14.0'", rings: "Flat Storage", coneBu: "0 bu", botConeCorrugations: "N/A",
+        crop: "Hard Red Winter", year: 2025, unit: "S14 T21N R1W", prac: "Dryland", bushels: "7,000 / 7,300 bu (95%)", protein: "13.0%", co2: "435 ppm", lastUpdated: "2026-07-25 02:30 PM",
+        temps: [46, 46, 47, 47, 48, 48, 49], co2_history: [405, 410, 415, 420, 425, 430, 435]
+      },
+
+      // RIGHT ELEVATOR ARRAY
+      "701": {
+        brand: "Scafco", diameter: "24.0'", circumference: "75.4'", buPerFt: "362 bu/ft", eveHeight: "16.0'", rings: "6 Rings", coneBu: "800 bu", botConeCorrugations: "2.66\"",
+        crop: "Feed Barley", year: 2026, unit: "Elevator Track", prac: "Irrigated", bushels: "6,500 / 7,100 bu (91%)", protein: "12.1%", co2: "460 ppm", lastUpdated: "2026-07-26 07:45 AM",
+        temps: [47, 48, 48, 49, 49, 50, 50], co2_history: [410, 420, 430, 440, 450, 455, 460]
+      },
+      "702": {
+        brand: "Scafco", diameter: "24.0'", circumference: "75.4'", buPerFt: "362 bu/ft", eveHeight: "16.0'", rings: "6 Rings", coneBu: "800 bu", botConeCorrugations: "2.66\"",
+        crop: "Feed Barley", year: 2026, unit: "Elevator Track", prac: "Irrigated", bushels: "6,300 / 7,100 bu (88%)", protein: "11.9%", co2: "450 ppm", lastUpdated: "2026-07-26 07:50 AM",
+        temps: [47, 47, 48, 48, 49, 49, 50], co2_history: [405, 415, 425, 435, 440, 445, 450]
+      },
+      "706": {
+        brand: "Butler", diameter: "24.0'", circumference: "75.4'", buPerFt: "362 bu/ft", eveHeight: "16.0'", rings: "6 Rings", coneBu: "800 bu", botConeCorrugations: "2.66\"",
+        crop: "Barley (Malting)", year: 2026, unit: "Elevator Track", prac: "Dryland", bushels: "5,900 / 7,300 bu (80%)", protein: "12.8%", co2: "440 ppm", lastUpdated: "2026-07-26 08:00 AM",
+        temps: [46, 46, 47, 47, 48, 48, 49], co2_history: [400, 410, 415, 425, 430, 435, 440]
+      },
+      "705": {
+        brand: "Butler", diameter: "24.0'", circumference: "75.4'", buPerFt: "362 bu/ft", eveHeight: "16.0'", rings: "6 Rings", coneBu: "800 bu", botConeCorrugations: "2.66\"",
+        crop: "Barley (Malting)", year: 2026, unit: "Elevator Track", prac: "Dryland", bushels: "6,100 / 7,300 bu (83%)", protein: "12.9%", co2: "445 ppm", lastUpdated: "2026-07-26 08:05 AM",
+        temps: [46, 47, 47, 48, 48, 49, 49], co2_history: [405, 410, 420, 425, 430, 440, 445]
+      },
+
+      // PARKER RECTANGLES
+      "PKRW": {
+        brand: "Parker", diameter: "4.0' x 5.0'", circumference: "18.0'", buPerFt: "16 bu/ft", eveHeight: "10.0'", rings: "Box Container", coneBu: "100 bu", botConeCorrugations: "Smooth",
+        crop: "Seed Barley (West)", year: 2026, unit: "Seed Storage", prac: "Treated", bushels: "380 / 400 bu (95%)", protein: "Cleaned Seed", co2: "400 ppm", lastUpdated: "2026-07-26 06:30 AM",
+        temps: [45, 45, 45, 45, 46, 46, 46], co2_history: [400, 400, 400, 400, 400, 400, 400]
+      },
+      "PKRM": {
+        brand: "Parker", diameter: "4.0' x 5.0'", circumference: "18.0'", buPerFt: "16 bu/ft", eveHeight: "10.0'", rings: "Box Container", coneBu: "100 bu", botConeCorrugations: "Smooth",
+        crop: "Seed Wheat (Mid)", year: 2026, unit: "Seed Storage", prac: "Treated", bushels: "390 / 400 bu (97%)", protein: "Cleaned Seed", co2: "400 ppm", lastUpdated: "2026-07-26 06:30 AM",
+        temps: [45, 45, 45, 45, 46, 46, 46], co2_history: [400, 400, 400, 400, 400, 400, 400]
+      },
+      "PKRE": {
+        brand: "Parker", diameter: "4.0' x 5.0'", circumference: "18.0'", buPerFt: "16 bu/ft", eveHeight: "10.0'", rings: "Box Container", coneBu: "100 bu", botConeCorrugations: "Smooth",
+        crop: "Seed Wheat (East)", year: 2026, unit: "Seed Storage", prac: "Treated", bushels: "350 / 400 bu (87%)", protein: "Cleaned Seed", co2: "400 ppm", lastUpdated: "2026-07-26 06:30 AM",
+        temps: [45, 45, 45, 45, 46, 46, 46], co2_history: [400, 400, 400, 400, 400, 400, 400]
+      }
+    };
+
+    let tempChartInstance = null;
+    let co2ChartInstance = null;
+
+    function selectBin(binId) {
+      document.querySelectorAll('.bin-node').forEach(node => node.classList.remove('active'));
+      const activeNode = document.getElementById(`node-${binId}`);
+      if (activeNode) activeNode.classList.add('active');
+
+      const data = binDatabase[binId] || {
+        brand: "Unknown", diameter: "-", circumference: "-", buPerFt: "-",
+        eveHeight: "-", rings: "-", coneBu: "-", botConeCorrugations: "-",
+        crop: "Unassigned", year: "-", unit: "-", prac: "-",
+        bushels: "N/A", protein: "N/A", co2: "N/A", lastUpdated: "No Record",
+        temps: [0,0,0,0,0,0,0], co2_history: [0,0,0,0,0,0,0]
+      };
+
+      // Populate Operations / Crop
+      document.getElementById('drawer-title').innerText = `Bin ${binId}`;
+      document.getElementById('val-crop').innerText = `${data.crop} (${data.year})`;
+      document.getElementById('val-unit').innerText = data.unit;
+      document.getElementById('val-prac').innerText = data.prac;
+      document.getElementById('val-protein').innerText = data.protein;
+      document.getElementById('val-bushels').innerText = data.bushels;
+      document.getElementById('val-co2').innerText = data.co2;
+      document.getElementById('val-updated').innerText = data.lastUpdated;
+
+      // Populate Bin Hardware Specs
+      document.getElementById('val-brand').innerText = data.brand;
+      document.getElementById('val-dim').innerText = `${data.diameter} / ${data.circumference}`;
+      document.getElementById('val-buft').innerText = data.buPerFt;
+      document.getElementById('val-eave').innerText = `${data.eveHeight} / ${data.rings}`;
+      document.getElementById('val-conebu').innerText = data.coneBu;
+      document.getElementById('val-corrugation').innerText = data.botConeCorrugations;
+
+      renderCharts(data.temps, data.co2_history);
+      document.getElementById('bin-drawer').classList.add('open');
+    }
+
+    function closeDrawer() {
+      document.getElementById('bin-drawer').classList.remove('open');
+      document.querySelectorAll('.bin-node').forEach(node => node.classList.remove('active'));
+    }
+
+    function renderCharts(tempData, co2Data) {
+      const labels = ['7d ago', '6d ago', '5d ago', '4d ago', '3d ago', '2d ago', 'Today'];
+
+      if (tempChartInstance) tempChartInstance.destroy();
+      if (co2ChartInstance) co2ChartInstance.destroy();
+
+      const ctxTemp = document.getElementById('tempChart').getContext('2d');
+      tempChartInstance = new Chart(ctxTemp, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Cable Temp (°F)',
+            data: tempData,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+          }
+        }
+      });
+
+      const ctxCo2 = document.getElementById('co2Chart').getContext('2d');
+      co2ChartInstance = new Chart(ctxCo2, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'CO2 (PPM)',
+            data: co2Data,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+          }
+        }
+      });
+    }
+
+    // Calibration click listener
+    document.querySelector('.map-wrapper').addEventListener('click', e => {
+      const svg = document.querySelector('.map-overlay');
+      const rect = svg.getBoundingClientRect();
+      const x = Math.round(((e.clientX - rect.left) / rect.width) * 1755);
+      const y = Math.round(((e.clientY - rect.top) / rect.height) * 1131);
+      console.log(`CLICKED COORDINATE: cx="${x}" cy="${y}"`);
+    });
+  </script>
+</body>
+</html>

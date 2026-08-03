@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sun River Site - Grain Bin Dashboard</title>
+  
+  <!-- Chart.js CDN for Cable Temp & CO2 History -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --accent-hover: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-color: #334155;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      padding: 1rem 1.5rem;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 600; color: var(--text-main); }
+    header p { font-size: 0.875rem; color: var(--text-muted); }
+
+    /* Main Container */
+    .viewport {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      padding: 1rem;
+    }
+
+.map-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0; /* Kills the tiny inline gap underneath the image */
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-color);
+}
+
+.map-wrapper img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none; /* Mouse clicks pass directly through image to SVG */
+}
+
+/* SVG Overlay */
+.map-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.bin-node {
+  fill: rgba(56, 189, 248, 0.25);
+  stroke: #38bdf8;
+  stroke-width: 2.5;
+  cursor: pointer;
+  pointer-events: all; /* Explicitly enables mouse hover/click on circles */
+  transition: all 0.2s ease-in-out;
+}
+
+.bin-node:hover {
+  fill: rgba(245, 158, 11, 0.45);
+  stroke: #f59e0b;
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
+}
+
+.bin-node.active {
+  fill: rgba(34, 197, 94, 0.5);
+  stroke: #22c55e;
+  stroke-width: 4;
+}
+    .bin-label {
+      fill: #ffffff;
+      font-size: 14px;
+      font-weight: 700;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+    }
+
+    /* Sliding Detail Drawer */
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: -420px;
+      width: 400px;
+      height: 100vh;
+      background: var(--card-bg);
+      border-left: 1px solid var(--border-color);
+      box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    .drawer.open { right: 0; }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+    .close-btn:hover { color: var(--text-main); }
+
+    /* Metric Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .metric-card {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .metric-card .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
+    .metric-card .value { font-size: 1.1rem; font-weight: 700; margin-top: 0.2rem; color: var(--text-main); }
+
+    .chart-container {
+      margin-top: 1rem;
+      background: rgba(15, 23, 42, 0.4);
+      padding: 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .chart-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <h1>Sun River Grain Storage Site</h1>
+      <p>Click any bin to load real-time status & sensor history</p>
+    </div>
+  </header>
+
+  <div class="viewport">
+    <div class="map-wrapper">
+      <!-- Site background image -->
+      <img src="MFI_SR_BINSITE_ANNOTED.png" alt="Sun River Bin Map" id="site-map">
+
+      <!-- Interactive SVG Overlay (Matched to 1200x800 base coordinate space) -->
+<svg class="map-overlay" viewBox="0 0 1755 1131">
+
+  <!-- Left Column (SR4, SR3, SR2, SR7) -->
+  <g onclick="selectBin('SR4')">
+    <circle cx="330" cy="225" r="45" class="bin-node" id="node-SR4" />
+    <text x="330" y="225" class="bin-label">SR4</text>
+  </g>
+
+  <g onclick="selectBin('SR3')">
+    <circle cx="330" cy="405" r="45" class="bin-node" id="node-SR3" />
+    <text x="330" y="405" class="bin-label">SR3</text>
+  </g>
+
+  <g onclick="selectBin('SR2')">
+    <circle cx="355" cy="540" r="45" class="bin-node" id="node-SR2" />
+    <text x="355" y="540" class="bin-label">SR2</text>
+  </g>
+
+  <g onclick="selectBin('SR7')">
+    <circle cx="310" cy="780" r="45" class="bin-node" id="node-SR7" />
+    <text x="310" y="780" class="bin-label">SR7</text>
+  </g>
+
+  <!-- Upper Center Bins (SR12, SR11, SR14) -->
+  <g onclick="selectBin('SR12')">
+    <circle cx="510" cy="180" r="45" class="bin-node" id="node-SR12" />
+    <text x="510" y="180" class="bin-label">SR12</text>
+  </g>
+
+  <g onclick="selectBin('SR11')">
+    <circle cx="560" cy="280" r="42" class="bin-node" id="node-SR11" />
+    <text x="560" y="280" class="bin-label">SR11</text>
+  </g>
+
+  <g onclick="selectBin('SR14')">
+    <circle cx="585" cy="400" r="45" class="bin-node" id="node-SR14" />
+    <text x="585" y="400" class="bin-label">SR14</text>
+  </g>
+
+  <!-- Large Center Bins (SR18, SR17, SR16, SR15) -->
+  <g onclick="selectBin('SR18')">
+    <circle cx="755" cy="275" r="58" class="bin-node" id="node-SR18" />
+    <text x="755" y="275" class="bin-label">SR18</text>
+  </g>
+
+  <g onclick="selectBin('SR17')">
+    <circle cx="950" cy="235" r="62" class="bin-node" id="node-SR17" />
+    <text x="950" y="235" class="bin-label">SR17</text>
+  </g>
+
+  <g onclick="selectBin('SR16')">
+    <circle cx="770" cy="480" r="62" class="bin-node" id="node-SR16" />
+    <text x="770" y="480" class="bin-label">SR16</text>
+  </g>
+
+  <g onclick="selectBin('SR15')">
+    <circle cx="780" cy="610" r="62" class="bin-node" id="node-SR15" />
+    <text x="780" y="610" class="bin-label">SR15</text>
+  </g>
+
+  <!-- Bottom Cluster (SR1, SR8, SR10) -->
+  <g onclick="selectBin('SR1')">
+    <circle cx="660" cy="990" r="45" class="bin-node" id="node-SR1" />
+    <text x="660" y="990" class="bin-label">SR1</text>
+  </g>
+
+  <g onclick="selectBin('SR8')">
+    <circle cx="560" cy="1035" r="45" class="bin-node" id="node-SR8" />
+    <text x="560" y="1035" class="bin-label">SR8</text>
+  </g>
+
+  <g onclick="selectBin('SR10')">
+    <circle cx="560" cy="880" r="42" class="bin-node" id="node-SR10" />
+    <text x="560" y="880" class="bin-label">SR10</text>
+  </g>
+
+  <!-- Quonset Bins (703, 704) -->
+  <g onclick="selectBin('703')">
+    <circle cx="945" cy="855" r="58" class="bin-node" id="node-703" />
+    <text x="945" y="855" class="bin-label">703</text>
+  </g>
+
+  <g onclick="selectBin('704')">
+    <circle cx="1025" cy="690" r="58" class="bin-node" id="node-704" />
+    <text x="1025" y="690" class="bin-label">704</text>
+  </g>
+
+  <!-- Right Diagonal Array (701, 702, 705, 706) -->
+  <g onclick="selectBin('701')">
+    <circle cx="1375" cy="235" r="52" class="bin-node" id="node-701" />
+    <text x="1375" y="235" class="bin-label">701</text>
+  </g>
+
+  <g onclick="selectBin('702')">
+    <circle cx="1275" cy="385" r="52" class="bin-node" id="node-702" />
+    <text x="1275" y="385" class="bin-label">702</text>
+  </g>
+
+  <g onclick="selectBin('706')">
+    <circle cx="1185" cy="495" r="52" class="bin-node" id="node-706" />
+    <text x="1185" y="495" class="bin-label">706</text>
+  </g>
+
+  <g onclick="selectBin('705')">
+    <circle cx="1100" cy="605" r="52" class="bin-node" id="node-705" />
+    <text x="1100" y="605" class="bin-label">705</text>
+  </g>
+
+</svg>
+
+  <!-- Detail Drawer -->
+  <div class="drawer" id="bin-drawer">
+    <div class="drawer-header">
+      <h2 id="drawer-title">Bin Details</h2>
+      <button class="close-btn" onclick="closeDrawer()">&times;</button>
+    </div>
+
+    <!-- Rapid Info Metrics -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="label">Crop / Year</div>
+        <div class="value" id="val-crop">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Farm Unit</div>
+        <div class="value" id="val-unit">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Practice</div>
+        <div class="value" id="val-prac">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Protein</div>
+        <div class="value" id="val-protein">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Current Volume</div>
+        <div class="value" id="val-bushels">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">CO₂ Level</div>
+        <div class="value" id="val-co2">--</div>
+      </div>
+    </div>
+
+    <!-- Chart.js Graphs -->
+    <div class="chart-container">
+      <div class="chart-title">Cable Temp History (°F)</div>
+      <canvas id="tempChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-title">CO₂ Trend (PPM)</div>
+      <canvas id="co2Chart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // Database Mock (Replace with real Supabase / Google Sheets API backend)
+    const binDatabase = {
+      "SR1": {
+        crop: "Dark Northern Spring", year: 2026, unit: "SR N/2521", prac: "Irrigated",
+        bushels: "6,120 / 7,300 bu (84%)", protein: "14.8%", co2: "520 ppm",
+        temps: [52, 54, 55, 57, 58, 60, 61],
+        co2_history: [450, 470, 480, 500, 510, 515, 520]
+      },
+      "SR2": {
+        crop: "Barley (Malting)", year: 2026, unit: "Fairhaven 17", prac: "Dryland",
+        bushels: "3,100 / 3,900 bu (79%)", protein: "12.1%", co2: "480 ppm",
+        temps: [48, 49, 50, 50, 51, 52, 52],
+        co2_history: [420, 430, 440, 450, 460, 470, 480]
+      },
+      "SR4": {
+        crop: "Hard Red Winter", year: 2025, unit: "Teichert S20", prac: "Irrigated",
+        bushels: "6,800 / 7,173 bu (95%)", protein: "13.5%", co2: "850 ppm",
+        temps: [60, 63, 67, 72, 78, 83, 89], // Heating alert
+        co2_history: [500, 550, 620, 710, 780, 810, 850]
+      },
+      "SR14": {
+        crop: "Dark Northern Spring", year: 2026, unit: "Sun River N/2521", prac: "Irrigated",
+        bushels: "9,850 / 10,000 bu (98%)", protein: "15.1%", co2: "510 ppm",
+        temps: [50, 51, 51, 52, 53, 53, 54],
+        co2_history: [460, 470, 480, 490, 500, 505, 510]
+      },
+      "SR18": {
+        crop: "Empty", year: "-", unit: "-", prac: "-",
+        bushels: "0 / 7,500 bu (0%)", protein: "-", co2: "400 ppm",
+        temps: [45, 45, 45, 46, 46, 45, 45],
+        co2_history: [400, 400, 400, 400, 400, 400, 400]
+      }
+    };
+
+    let tempChartInstance = null;
+    let co2ChartInstance = null;
+
+    function selectBin(binId) {
+      // Highlight active node
+      document.querySelectorAll('.bin-node').forEach(node => node.classList.remove('active'));
+      const activeNode = document.getElementById(`node-${binId}`);
+      if (activeNode) activeNode.classList.add('active');
+
+      // Fetch Bin Info
+      const data = binDatabase[binId] || {
+        crop: "Unknown", year: "-", unit: "-", prac: "-",
+        bushels: "N/A", protein: "N/A", co2: "N/A",
+        temps: [0,0,0,0,0,0,0], co2_history: [0,0,0,0,0,0,0]
+      };
+
+      // Populate UI
+      document.getElementById('drawer-title').innerText = `Bin ${binId}`;
+      document.getElementById('val-crop').innerText = `${data.crop} (${data.year})`;
+      document.getElementById('val-unit').innerText = data.unit;
+      document.getElementById('val-prac').innerText = data.prac;
+      document.getElementById('val-protein').innerText = data.protein;
+      document.getElementById('val-bushels').innerText = data.bushels;
+      document.getElementById('val-co2').innerText = data.co2;
+
+      // Render Charts
+      renderCharts(data.temps, data.co2_history);
+
+      // Open Drawer
+      document.getElementById('bin-drawer').classList.add('open');
+    }
+
+    function closeDrawer() {
+      document.getElementById('bin-drawer').classList.remove('open');
+      document.querySelectorAll('.bin-node').forEach(node => node.classList.remove('active'));
+    }
+
+    function renderCharts(tempData, co2Data) {
+      const labels = ['7d ago', '6d ago', '5d ago', '4d ago', '3d ago', '2d ago', 'Today'];
+
+      // Destroy previous chart instances before re-rendering
+      if (tempChartInstance) tempChartInstance.destroy();
+      if (co2ChartInstance) co2ChartInstance.destroy();
+
+      // Temperature Chart
+      const ctxTemp = document.getElementById('tempChart').getContext('2d');
+      tempChartInstance = new Chart(ctxTemp, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Top Cable (°F)',
+            data: tempData,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+          }
+        }
+      });
+
+      // CO2 Chart
+      const ctxCo2 = document.getElementById('co2Chart').getContext('2d');
+      co2ChartInstance = new Chart(ctxCo2, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'CO2 (PPM)',
+            data: co2Data,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
