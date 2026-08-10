@@ -83,28 +83,15 @@
       border-radius: 3px;
     }
 
-    #admin-btn {
-      background: var(--card-bg);
-      color: var(--accent);
-      border: 1px solid var(--accent);
-      padding: 0.3rem 0.6rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.75rem;
-      font-weight: bold;
-      transition: all 0.2s ease;
-    }
-
-    /* Main Container Viewport (Rescaled for Desktop/Laptop Displays) */
+    /* Main Container Viewport */
     .viewport {
       position: relative;
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
-      padding: 0.5rem;
-      max-height: calc(100vh - 60px);
+      overflow: auto;
+      padding: 1rem;
     }
 
     /* ==========================================================================
@@ -113,21 +100,19 @@
     .map-wrapper {
       position: relative;
       display: inline-block;
-      width: auto;
-      height: 100%;
-      max-height: calc(100vh - 80px);
-      aspect-ratio: 1755 / 1131;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-      border: 1px solid var(--border-color);
+      width: 100%;
+      max-width: 1755px;
+      line-height: 0;
       border-radius: 8px;
       overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border-color);
     }
 
     .map-wrapper img {
       display: block;
       width: 100%;
-      height: 100%;
-      object-fit: contain;
+      height: auto;
       pointer-events: none;
     }
 
@@ -262,7 +247,7 @@
       <h1>Sun River Grain Storage Site</h1>
     </div>
 
-    <!-- Map Color Legend & Admin Access Button -->
+    <!-- Map Color Legend -->
     <div class="legend-bar">
       <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-empty);"></div>EMPTY</div>
       <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-ww);"></div>WW</div>
@@ -273,8 +258,6 @@
       <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-ypeas);"></div>Yel Peas</div>
       <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-pellets);"></div>Pellets</div>
       <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-unknown);"></div>Unknown</div>
-      
-      <button id="admin-btn" onclick="toggleAdminMode()">🔒 Admin Edit</button>
     </div>
   </header>
 
@@ -357,6 +340,7 @@
           <circle cx="1631" cy="217" r="55" class="bin-node" id="node-701" />
           <text x="1631" y="217" class="bin-label">701</text>
         </g>
+        <!-- Corrected Bin 702 Alignment (cx="1472") -->
         <g onclick="selectBin('702')">
           <circle cx="1472" cy="334" r="55" class="bin-node" id="node-702" />
           <text x="1472" y="334" class="bin-label">702</text>
@@ -426,39 +410,7 @@
         <div class="value" id="val-updated" style="color: var(--accent);">--</div>
       </div>
 
-      <!-- OPERATIONAL NOTES & LOG -->
-      <div class="metric-card" style="grid-column: span 2;">
-        <div class="label">Operational Notes & Log</div>
-        <div class="value" id="val-notes" style="font-weight: normal; font-size: 0.82rem; color: #cbd5e1; white-space: pre-wrap; margin-top: 0.3rem;">No active notes.</div>
-      </div>
-
-      <!-- ADMIN EDIT CONTROL FORM (Hidden by default) -->
-      <div id="admin-controls" style="display: none; grid-column: span 2; background: #0f172a; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--accent); margin-top: 0.3rem;">
-        <div class="label" style="color: var(--accent); font-weight: bold; margin-bottom: 0.4rem;">EDIT BIN RECORD</div>
-        
-        <label style="font-size: 0.7rem; color: var(--text-muted); display: block; margin-top: 0.3rem;">Crop Code</label>
-        <select id="edit-cropcode" style="width: 100%; padding: 0.3rem; margin-bottom: 0.4rem; background: #1e293b; color: #fff; border: 1px solid var(--border-color); border-radius: 4px;">
-          <option value="EMPTY">EMPTY</option>
-          <option value="WW">WW (Winter Wheat)</option>
-          <option value="SW">SW (Spring Wheat)</option>
-          <option value="BLY">BLY (Barley)</option>
-          <option value="LENTILS">LENTILS</option>
-          <option value="GPEAS">GPEAS (Green Peas)</option>
-          <option value="YPEAS">YPEAS (Yellow Peas)</option>
-          <option value="PELLETS">PELLETS</option>
-          <option value="UNKNOWN">UNKNOWN</option>
-        </select>
-
-        <label style="font-size: 0.7rem; color: var(--text-muted); display: block;">Current Bushels</label>
-        <input type="number" id="edit-bushels" style="width: 100%; padding: 0.3rem; margin-bottom: 0.4rem; background: #1e293b; color: #fff; border: 1px solid var(--border-color); border-radius: 4px;">
-
-        <label style="font-size: 0.7rem; color: var(--text-muted); display: block;">Log Note (e.g., 260730: Measured 1 ring down)</label>
-        <textarea id="edit-notes" rows="3" style="width: 100%; padding: 0.3rem; margin-bottom: 0.5rem; background: #1e293b; color: #fff; border: 1px solid var(--border-color); border-radius: 4px; font-family: inherit; font-size: 0.8rem;"></textarea>
-
-        <button onclick="saveBinEdits()" style="width: 100%; padding: 0.45rem; background: var(--accent); color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Save Record & Download JS Update</button>
-      </div>
-
-      <!-- BIN HARDWARE SPECS -->
+      <!-- BIN HARDWARE SPECS (Units Moved to Label Headers) -->
       <div class="metric-card" style="grid-column: span 2; margin-top: 0.4rem; background: rgba(30, 41, 59, 0.9); border-bottom: 2px solid var(--border-color);">
         <div class="label" style="color: var(--accent); font-weight: 700;">STRUCTURAL HARDWARE SPECS</div>
       </div>
@@ -503,9 +455,6 @@
   <script>
     let tempChartInstance = null;
     let co2ChartInstance = null;
-    let isAdmin = false;
-    let currentSelectedBin = null;
-    const ADMIN_PIN = "2026"; // Administrative Access Code
 
     // Apply Dynamic Crop Colors to SVG Overlays on Load
     function initializeMapColors() {
@@ -519,30 +468,7 @@
       });
     }
 
-    function toggleAdminMode() {
-      if (!isAdmin) {
-        const pin = prompt("Enter Admin Access Code:");
-        if (pin === ADMIN_PIN) {
-          isAdmin = true;
-          document.getElementById('admin-btn').innerText = "🔓 Admin Active";
-          document.getElementById('admin-btn').style.background = "var(--accent)";
-          document.getElementById('admin-btn').style.color = "#000";
-          if (currentSelectedBin) selectBin(currentSelectedBin);
-          alert("Admin Edit Mode Unlocked!");
-        } else if (pin !== null) {
-          alert("Invalid Access Code");
-        }
-      } else {
-        isAdmin = false;
-        document.getElementById('admin-btn').innerText = "🔒 Admin Edit";
-        document.getElementById('admin-btn').style.background = "var(--card-bg)";
-        document.getElementById('admin-btn').style.color = "var(--accent)";
-        document.getElementById('admin-controls').style.display = "none";
-      }
-    }
-
     function selectBin(binId) {
-      currentSelectedBin = binId;
       document.querySelectorAll('.bin-node').forEach(node => node.classList.remove('active'));
       const activeNode = document.getElementById(`node-${binId}`);
       if (activeNode) activeNode.classList.add('active');
@@ -553,13 +479,13 @@
 
       const contents = (typeof binContentsData !== 'undefined' && binContentsData[binId]) ? binContentsData[binId] : {
         cropCode: "UNKNOWN", cropName: "Unassigned", year: "-", unit: "-", prac: "-",
-        currentBu: 0, protein: "N/A", co2: "N/A", lastUpdated: "No Record", notes: "No active notes.",
+        currentBu: 0, protein: "N/A", co2: "N/A", lastUpdated: "No Record",
         temps: [0,0,0,0,0,0,0], co2_history: [0,0,0,0,0,0,0]
       };
 
       // Populate Crop & Operations UI
       document.getElementById('drawer-title').innerText = `Bin ${binId}`;
-      document.getElementById('val-crop').innerText = `${contents.cropName || contents.cropCode} (${contents.year})`;
+      document.getElementById('val-crop').innerText = `${contents.cropName} (${contents.year})`;
       document.getElementById('val-unit').innerText = contents.unit;
       document.getElementById('val-prac').innerText = contents.prac;
       document.getElementById('val-protein').innerText = contents.protein;
@@ -569,75 +495,16 @@
       document.getElementById('val-co2').innerText = contents.co2;
       document.getElementById('val-updated').innerText = contents.lastUpdated;
 
-      // Populate Notes
-      const activeNotes = contents.notes || "No active notes logged.";
-      document.getElementById('val-notes').innerText = activeNotes;
-
-      // Admin controls visibility
-      if (isAdmin) {
-        document.getElementById('admin-controls').style.display = "block";
-        document.getElementById('edit-cropcode').value = contents.cropCode || "EMPTY";
-        document.getElementById('edit-bushels').value = contents.currentBu || 0;
-        document.getElementById('edit-notes').value = contents.notes || "";
-      } else {
-        document.getElementById('admin-controls').style.display = "none";
-      }
-
-      // Populate Bin Structural Hardware Specs
+      // Populate Bin Structural Hardware Specs (Formatting Numbers cleanly)
       document.getElementById('val-brand').innerText = specs.brand;
-      document.getElementById('val-dim').innerText = specs.diameter ? `${specs.diameter} ft` : "-";
+      document.getElementById('val-dim').innerText = specs.diameter > 0 ? `${specs.diameter} ft` : "-";
       document.getElementById('val-buft').innerText = specs.buPerFt > 0 ? `${specs.buPerFt} bu/ft` : "-";
       document.getElementById('val-eave').innerText = specs.eveHeight > 0 ? `${specs.eveHeight} ft / ${specs.rings} Rings` : "-";
       document.getElementById('val-conebu').innerText = specs.coneBu > 0 ? `${specs.coneBu.toLocaleString()} bu` : "0 bu";
       document.getElementById('val-maxbu').innerText = specs.maxBu > 0 ? `${specs.maxBu.toLocaleString()} bu` : "-";
 
-      renderCharts(contents.temps || [0,0,0,0,0,0,0], contents.co2_history || [400,400,400,400,400,400,400]);
+      renderCharts(contents.temps, contents.co2_history);
       document.getElementById('bin-drawer').classList.add('open');
-    }
-
-    function saveBinEdits() {
-      if (!currentSelectedBin || typeof binContentsData === 'undefined') return;
-
-      if (!binContentsData[currentSelectedBin]) {
-        binContentsData[currentSelectedBin] = {
-          cropCode: "EMPTY", cropName: "Empty", year: "2026", unit: "Sun River", prac: "Dryland",
-          currentBu: 0, protein: "-", co2: "400 ppm", lastUpdated: "", notes: "",
-          temps: [45,45,45,45,45,45,45], co2_history: [400,400,400,400,400,400,400]
-        };
-      }
-
-      const newCode = document.getElementById('edit-cropcode').value;
-      const newBu = parseInt(document.getElementById('edit-bushels').value) || 0;
-      const newNote = document.getElementById('edit-notes').value;
-
-      // Crop code name map
-      const nameMap = {
-        "EMPTY": "Empty", "WW": "Winter Wheat", "SW": "Spring Wheat", "BLY": "Barley",
-        "LENTILS": "Lentils", "GPEAS": "Green Peas", "YPEAS": "Yellow Peas",
-        "PELLETS": "Feeder Pellets", "UNKNOWN": "Unassigned"
-      };
-
-      // Update live memory object
-      binContentsData[currentSelectedBin].cropCode = newCode;
-      binContentsData[currentSelectedBin].cropName = nameMap[newCode] || newCode;
-      binContentsData[currentSelectedBin].currentBu = newBu;
-      binContentsData[currentSelectedBin].notes = newNote;
-      binContentsData[currentSelectedBin].lastUpdated = new Date().toISOString().slice(0, 10) + " " + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-      // Refresh map visuals and drawer text
-      initializeMapColors();
-      selectBin(currentSelectedBin);
-
-      // Trigger download of updated bin-contents.js
-      const dataStr = "data:text/javascript;charset=utf-8," + encodeURIComponent("// bin-contents.js - Dynamic Crop Inventory & Sensor Logs\nconst binContentsData = " + JSON.stringify(binContentsData, null, 2) + ";\n");
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", "bin-contents.js");
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-
-      alert(`Bin ${currentSelectedBin} updated! Updated bin-contents.js downloaded.`);
     }
 
     function closeDrawer() {
@@ -700,7 +567,7 @@
       });
     }
 
-    // Initialize Map colors once page loads
+    // Initialize Map colors once DOM is ready
     window.addEventListener('DOMContentLoaded', initializeMapColors);
 
     // Calibration click listener
