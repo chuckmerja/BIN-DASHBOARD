@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sun River Site - Grain Bin Dashboard v2.0</title>
+  
+  <!-- External Dependencies & Data Files -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="bin-specs.js"></script>
+  <script src="bin-contents.js"></script>
+
+  <style>
+    /* ==========================================================================
+       1. COLOR SCHEME & GLOBAL STYLES
+       ========================================================================== */
+    :root {
+      --bg-color: #0f172a;       /* Dark slate background */
+      --card-bg: #1e293b;       /* Panel card background */
+      --accent: #38bdf8;        /* Default highlight */
+      --text-main: #f8fafc;     /* Bright text */
+      --text-muted: #94a3b8;    /* Subdued labels */
+      --border-color: #334155;  /* Subtle divider lines */
+
+      /* DYNAMIC CROP COLOR PALETTE */
+      --crop-empty:   #64748b;  /* Grey */
+      --crop-ww:      #f97316;  /* Orange */
+      --crop-bly:     #38bdf8;  /* Light Blue */
+      --crop-sw:      #ec4899;  /* Pink */
+      --crop-lentils: #22c55e;  /* Green */
+      --crop-gpeas:   #14b8a6;  /* Blue-Green / Teal */
+      --crop-ypeas:   #eab308;  /* Yellow */
+      --crop-pellets: #8d5b4c;  /* Earthy Brown */
+      --crop-unknown: #ef4444;  /* Red */
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top Navigation Header */
+    header {
+      padding: 0.75rem 1.25rem;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    header h1 { font-size: 1.15rem; font-weight: 600; color: var(--text-main); }
+
+    /* Map Color Legend Bar */
+    .legend-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    /* Main Container Viewport */
+    .viewport {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      padding: 1rem;
+    }
+
+    /* ==========================================================================
+       2. MAP CONTAINER & SVG OVERLAY STYLES
+       ========================================================================== */
+    .map-wrapper {
+      position: relative;
+      display: inline-block;
+      width: 100%;
+      max-width: 1755px;
+      line-height: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border-color);
+    }
+
+    .map-wrapper img {
+      display: block;
+      width: 100%;
+      height: auto;
+      pointer-events: none;
+    }
+
+    .map-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    /* DYNAMIC CROP COLORING ON OVERLAY NODES */
+    .bin-node {
+      stroke-width: 2.5;
+      cursor: pointer;
+      pointer-events: all;
+      transition: all 0.2s ease-in-out;
+    }
+
+    .bin-node[data-crop="EMPTY"]   { fill: rgba(100, 116, 139, 0.35); stroke: var(--crop-empty); }
+    .bin-node[data-crop="WW"]      { fill: rgba(249, 115, 22, 0.40);  stroke: var(--crop-ww); }
+    .bin-node[data-crop="BLY"]     { fill: rgba(56, 189, 248, 0.35);  stroke: var(--crop-bly); }
+    .bin-node[data-crop="SW"]      { fill: rgba(236, 72, 153, 0.40);  stroke: var(--crop-sw); }
+    .bin-node[data-crop="LENTILS"] { fill: rgba(34, 197, 94, 0.40);   stroke: var(--crop-lentils); }
+    .bin-node[data-crop="GPEAS"]   { fill: rgba(20, 184, 166, 0.40);  stroke: var(--crop-gpeas); }
+    .bin-node[data-crop="YPEAS"]   { fill: rgba(234, 179, 8, 0.45);   stroke: var(--crop-ypeas); }
+    .bin-node[data-crop="PELLETS"] { fill: rgba(141, 91, 76, 0.45);   stroke: var(--crop-pellets); }
+    .bin-node[data-crop="UNKNOWN"] { fill: rgba(239, 68, 68, 0.45);   stroke: var(--crop-unknown); }
+
+    .bin-node:hover {
+      filter: drop-shadow(0 0 8px #f59e0b);
+      stroke-width: 4;
+    }
+
+    .bin-node.active {
+      stroke: #ffffff !important;
+      stroke-width: 4.5;
+      filter: drop-shadow(0 0 10px #ffffff);
+    }
+
+    /* Bin ID Overlay Text Labels */
+    .bin-label {
+      fill: #ffffff;
+      font-size: 13px;
+      font-weight: 700;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+    }
+
+    .bin-label-sm { font-size: 10px; }
+
+    /* ==========================================================================
+       3. SLIDING DETAIL DRAWER STYLES
+       ========================================================================== */
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: -440px;
+      width: 420px;
+      height: 100vh;
+      background: var(--card-bg);
+      border-left: 1px solid var(--border-color);
+      box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      padding: 1.25rem;
+      overflow-y: auto;
+    }
+
+    .drawer.open { right: 0; }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+    .close-btn:hover { color: var(--text-main); }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.6rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .metric-card {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 0.55rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .metric-card .label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-card .value { font-size: 0.9rem; font-weight: 700; margin-top: 0.15rem; color: var(--text-main); }
+
+    .chart-container {
+      margin-top: 0.6rem;
+      background: rgba(15, 23, 42, 0.4);
+      padding: 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+    }
+
+    .chart-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <h1>Sun River Grain Storage Site</h1>
+    </div>
+
+    <!-- Map Color Legend -->
+    <div class="legend-bar">
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-empty);"></div>EMPTY</div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-ww);"></div>WW</div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-bly);"></div>BLY</div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-sw);"></div>SW</div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-lentils);"></div>Lentils</div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-gpeas);"></div>Grn Peas</div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-ypeas);"></div>Yel Peas</div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-pellets);"></div>Pellets</div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--crop-unknown);"></div>Unknown</div>
+    </div>
+  </header>
+
+  <div class="viewport">
+    <div class="map-wrapper">
+      <img src="MFI_SR_BINSITE_ANNOTED.png" alt="Sun River Bin Map" id="site-map">
+
+      <svg class="map-overlay" viewBox="0 0 1755 1131" preserveAspectRatio="xMidYMid meet">
+
+        <!-- LEFT COLUMN -->
+        <g onclick="selectBin('SR4')">
+          <circle cx="179" cy="231" r="45" class="bin-node" id="node-SR4" />
+          <text x="179" y="231" class="bin-label">SR4</text>
+        </g>
+        <g onclick="selectBin('SR3')">
+          <circle cx="183" cy="377" r="45" class="bin-node" id="node-SR3" />
+          <text x="183" y="377" class="bin-label">SR3</text>
+        </g>
+        <g onclick="selectBin('SR2')">
+          <circle cx="256" cy="712" r="45" class="bin-node" id="node-SR2" />
+          <text x="256" y="712" class="bin-label">SR2</text>
+        </g>
+        <g onclick="selectBin('SR7')">
+          <circle cx="127" cy="803" r="45" class="bin-node" id="node-SR7" />
+          <text x="127" y="803" class="bin-label">SR7</text>
+        </g>
+
+        <!-- CENTER CLUSTER -->
+        <g onclick="selectBin('SR13')">
+          <circle cx="381" cy="627" r="42" class="bin-node" id="node-SR13" />
+          <text x="381" y="627" class="bin-label">SR13</text>
+        </g>
+        <g onclick="selectBin('SR9')">
+          <circle cx="378" cy="782" r="42" class="bin-node" id="node-SR9" />
+          <text x="378" y="782" class="bin-label">SR9</text>
+        </g>
+        <g onclick="selectBin('SR8')">
+          <circle cx="373" cy="1073" r="45" class="bin-node" id="node-SR8" />
+          <text x="373" y="1073" class="bin-label">SR8</text>
+        </g>
+        <g onclick="selectBin('SR5')">
+          <circle cx="533" cy="663" r="55" class="bin-node" id="node-SR5" />
+          <text x="533" y="663" class="bin-label">SR5</text>
+        </g>
+        <g onclick="selectBin('SR6')">
+          <circle cx="678" cy="849" r="65" class="bin-node" id="node-SR6" />
+          <text x="678" y="849" class="bin-label">SR6</text>
+        </g>
+
+        <!-- LARGE CENTER BINS -->
+        <g onclick="selectBin('SR18')">
+          <circle cx="678" cy="286" r="60" class="bin-node" id="node-SR18" />
+          <text x="678" y="286" class="bin-label">SR18</text>
+        </g>
+        <g onclick="selectBin('SR17')">
+          <circle cx="1054" cy="218" r="65" class="bin-node" id="node-SR17" />
+          <text x="1054" y="218" class="bin-label">SR17</text>
+        </g>
+        <g onclick="selectBin('SR16')">
+          <circle cx="886" cy="352" r="65" class="bin-node" id="node-SR16" />
+          <text x="886" y="352" class="bin-label">SR16</text>
+        </g>
+        <g onclick="selectBin('SR15')">
+          <circle cx="715" cy="494" r="65" class="bin-node" id="node-SR15" />
+          <text x="715" y="494" class="bin-label">SR15</text>
+        </g>
+
+        <!-- QUONSET BINS -->
+        <g onclick="selectBin('703')">
+          <circle cx="903" cy="875" r="60" class="bin-node" id="node-703" />
+          <text x="903" y="875" class="bin-label">703</text>
+        </g>
+        <g onclick="selectBin('704')">
+          <circle cx="1036" cy="726" r="60" class="bin-node" id="node-704" />
+          <text x="1036" y="726" class="bin-label">704</text>
+        </g>
+
+        <!-- RIGHT DIAGONAL ARRAY -->
+        <g onclick="selectBin('701')">
+          <circle cx="1631" cy="217" r="55" class="bin-node" id="node-701" />
+          <text x="1631" y="217" class="bin-label">701</text>
+        </g>
+        <!-- Corrected Bin 702 Alignment (cx="1472") -->
+        <g onclick="selectBin('702')">
+          <circle cx="1472" cy="334" r="55" class="bin-node" id="node-702" />
+          <text x="1472" y="334" class="bin-label">702</text>
+        </g>
+        <g onclick="selectBin('706')">
+          <circle cx="1328" cy="463" r="55" class="bin-node" id="node-706" />
+          <text x="1328" y="463" class="bin-label">706</text>
+        </g>
+        <g onclick="selectBin('705')">
+          <circle cx="1197" cy="584" r="55" class="bin-node" id="node-705" />
+          <text x="1197" y="584" class="bin-label">705</text>
+        </g>
+
+        <!-- PARKER RECTANGLES -->
+        <g onclick="selectBin('PKRW')">
+          <rect x="116" y="896" width="40" height="50" rx="3" class="bin-node" id="node-PKRW" />
+          <text x="136" y="921" class="bin-label bin-label-sm">PKRW</text>
+        </g>
+        <g onclick="selectBin('PKRM')">
+          <rect x="163" y="896" width="40" height="50" rx="3" class="bin-node" id="node-PKRM" />
+          <text x="183" y="921" class="bin-label bin-label-sm">PKRM</text>
+        </g>
+        <g onclick="selectBin('PKRE')">
+          <rect x="209" y="896" width="40" height="50" rx="3" class="bin-node" id="node-PKRE" />
+          <text x="229" y="921" class="bin-label bin-label-sm">PKRE</text>
+        </g>
+
+      </svg>
+    </div>
+  </div>
+
+  <!-- SLIDING DRAWER UI -->
+  <div class="drawer" id="bin-drawer">
+    <div class="drawer-header">
+      <h2 id="drawer-title">Bin Details</h2>
+      <button class="close-btn" onclick="closeDrawer()">&times;</button>
+    </div>
+
+    <!-- CROP & OPERATIONAL DATA -->
+    <div class="metrics-grid">
+      <div class="metric-card" style="grid-column: span 2; border-left: 4px solid var(--accent);">
+        <div class="label">Crop / Harvest Year</div>
+        <div class="value" id="val-crop">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Farm Unit</div>
+        <div class="value" id="val-unit">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Practice</div>
+        <div class="value" id="val-prac">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Protein / Quality</div>
+        <div class="value" id="val-protein">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Current Fill Vol.</div>
+        <div class="value" id="val-bushels">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">CO₂ Reading</div>
+        <div class="value" id="val-co2">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Last Reading</div>
+        <div class="value" id="val-updated" style="color: var(--accent);">--</div>
+      </div>
+
+      <!-- BIN HARDWARE SPECS (Units Moved to Label Headers) -->
+      <div class="metric-card" style="grid-column: span 2; margin-top: 0.4rem; background: rgba(30, 41, 59, 0.9); border-bottom: 2px solid var(--border-color);">
+        <div class="label" style="color: var(--accent); font-weight: 700;">STRUCTURAL HARDWARE SPECS</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Brand / Model</div>
+        <div class="value" id="val-brand">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Diameter (ft)</div>
+        <div class="value" id="val-dim">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Capacity (bu / ft)</div>
+        <div class="value" id="val-buft">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Eave Ht (ft) / Rings</div>
+        <div class="value" id="val-eave">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Cone Vol (bu)</div>
+        <div class="value" id="val-conebu">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Max Capacity (bu)</div>
+        <div class="value" id="val-maxbu">--</div>
+      </div>
+    </div>
+
+    <!-- Chart.js Canvas Containers -->
+    <div class="chart-container">
+      <div class="chart-title">Cable Temp History (°F)</div>
+      <canvas id="tempChart"></canvas>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-title">CO₂ Trend (PPM)</div>
+      <canvas id="co2Chart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    let tempChartInstance = null;
+    let co2ChartInstance = null;
+
+    // Apply Dynamic Crop Colors to SVG Overlays on Load
+    function initializeMapColors() {
+      if (typeof binContentsData === 'undefined') return;
+      Object.keys(binContentsData).forEach(binId => {
+        const node = document.getElementById(`node-${binId}`);
+        if (node) {
+          const code = binContentsData[binId].cropCode || "UNKNOWN";
+          node.setAttribute('data-crop', code);
+        }
+      });
+    }
+
+    function selectBin(binId) {
+      document.querySelectorAll('.bin-node').forEach(node => node.classList.remove('active'));
+      const activeNode = document.getElementById(`node-${binId}`);
+      if (activeNode) activeNode.classList.add('active');
+
+      const specs = (typeof binHardwareSpecs !== 'undefined' && binHardwareSpecs[binId]) ? binHardwareSpecs[binId] : {
+        brand: "-", diameter: 0, buPerFt: 0, eveHeight: 0, rings: 0, coneBu: 0, maxBu: 0
+      };
+
+      const contents = (typeof binContentsData !== 'undefined' && binContentsData[binId]) ? binContentsData[binId] : {
+        cropCode: "UNKNOWN", cropName: "Unassigned", year: "-", unit: "-", prac: "-",
+        currentBu: 0, protein: "N/A", co2: "N/A", lastUpdated: "No Record",
+        temps: [0,0,0,0,0,0,0], co2_history: [0,0,0,0,0,0,0]
+      };
+
+      // Populate Crop & Operations UI
+      document.getElementById('drawer-title').innerText = `Bin ${binId}`;
+      document.getElementById('val-crop').innerText = `${contents.cropName} (${contents.year})`;
+      document.getElementById('val-unit').innerText = contents.unit;
+      document.getElementById('val-prac').innerText = contents.prac;
+      document.getElementById('val-protein').innerText = contents.protein;
+      
+      const pct = specs.maxBu > 0 ? Math.round((contents.currentBu / specs.maxBu) * 100) : 0;
+      document.getElementById('val-bushels').innerText = `${contents.currentBu.toLocaleString()} bu (${pct}%)`;
+      document.getElementById('val-co2').innerText = contents.co2;
+      document.getElementById('val-updated').innerText = contents.lastUpdated;
+
+      // Populate Bin Structural Hardware Specs (Formatting Numbers cleanly)
+      document.getElementById('val-brand').innerText = specs.brand;
+      document.getElementById('val-dim').innerText = specs.diameter > 0 ? `${specs.diameter} ft` : "-";
+      document.getElementById('val-buft').innerText = specs.buPerFt > 0 ? `${specs.buPerFt} bu/ft` : "-";
+      document.getElementById('val-eave').innerText = specs.eveHeight > 0 ? `${specs.eveHeight} ft / ${specs.rings} Rings` : "-";
+      document.getElementById('val-conebu').innerText = specs.coneBu > 0 ? `${specs.coneBu.toLocaleString()} bu` : "0 bu";
+      document.getElementById('val-maxbu').innerText = specs.maxBu > 0 ? `${specs.maxBu.toLocaleString()} bu` : "-";
+
+      renderCharts(contents.temps, contents.co2_history);
+      document.getElementById('bin-drawer').classList.add('open');
+    }
+
+    function closeDrawer() {
+      document.getElementById('bin-drawer').classList.remove('open');
+      document.querySelectorAll('.bin-node').forEach(node => node.classList.remove('active'));
+    }
+
+    function renderCharts(tempData, co2Data) {
+      const labels = ['7d ago', '6d ago', '5d ago', '4d ago', '3d ago', '2d ago', 'Today'];
+
+      if (tempChartInstance) tempChartInstance.destroy();
+      if (co2ChartInstance) co2ChartInstance.destroy();
+
+      const ctxTemp = document.getElementById('tempChart').getContext('2d');
+      tempChartInstance = new Chart(ctxTemp, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Cable Temp (°F)',
+            data: tempData,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+          }
+        }
+      });
+
+      const ctxCo2 = document.getElementById('co2Chart').getContext('2d');
+      co2ChartInstance = new Chart(ctxCo2, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'CO2 (PPM)',
+            data: co2Data,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+          }
+        }
+      });
+    }
+
+    // Initialize Map colors once DOM is ready
+    window.addEventListener('DOMContentLoaded', initializeMapColors);
+
+    // Calibration click listener
+    document.querySelector('.map-wrapper').addEventListener('click', e => {
+      const svg = document.querySelector('.map-overlay');
+      const rect = svg.getBoundingClientRect();
+      const x = Math.round(((e.clientX - rect.left) / rect.width) * 1755);
+      const y = Math.round(((e.clientY - rect.top) / rect.height) * 1131);
+      console.log(`CLICKED COORDINATE: cx="${x}" cy="${y}"`);
+    });
+  </script>
+</body>
+</html>
