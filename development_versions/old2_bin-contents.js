@@ -38,7 +38,7 @@ const binContentsData = {
     "currentBu": 6300,
     "protein": "13.4%",
     "co2": "450 ppm",
-    "lastUpdated": "2026-08-10 10:48 PM",
+    "lastUpdated": "2026-08-03 10:00 AM",
     "temps": [
       47,
       47,
@@ -56,8 +56,7 @@ const binContentsData = {
       440,
       445,
       450
-    ],
-    "notes": "bin butt 2024, NW quarter filled bin butt plus up to 6.42 ft and cone, then Lundby up to 1 ft down from eves"
+    ]
   },
   "703": {
     "cropCode": "EMPTY",
@@ -97,7 +96,7 @@ const binContentsData = {
     "currentBu": 7000,
     "protein": "13.0%",
     "co2": "435 ppm",
-    "lastUpdated": "2026-08-10 10:46 PM",
+    "lastUpdated": "2026-08-03 10:00 AM",
     "temps": [
       46,
       46,
@@ -115,8 +114,7 @@ const binContentsData = {
       425,
       430,
       435
-    ],
-    "notes": "1 ft down coned up, 2024or5, bot 76\" and cone is Q HiPro then 12.34 ft CC.  Emily (RCIS) measured July 2025"
+    ]
   },
   "705": {
     "cropCode": "EMPTY",
@@ -156,7 +154,7 @@ const binContentsData = {
     "currentBu": 5900,
     "protein": "14.1%",
     "co2": "440 ppm",
-    "lastUpdated": "2026-08-10 10:46 PM",
+    "lastUpdated": "2026-08-03 10:00 AM",
     "temps": [
       46,
       46,
@@ -174,8 +172,7 @@ const binContentsData = {
       430,
       435,
       440
-    ],
-    "notes": "18\" down Emily (RCIS) measured July 2025"
+    ]
   },
   "SR4": {
     "cropCode": "EMPTY",
